@@ -118,7 +118,9 @@ export default function HomePage() {
 
       audioCtxRef.current = ctx;
       analyserRef.current = analyser;
-      dataRef.current = new Uint8Array(analyser.frequencyBinCount);
+      dataRef.current = new Uint8Array(
+        new ArrayBuffer(analyser.frequencyBinCount)
+      );
     }
 
     const tick = () => {
