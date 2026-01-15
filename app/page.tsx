@@ -8,7 +8,7 @@ import Background from "./components/Background";
 
 gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
 
-export default function HomePage(): JSX.Element {
+export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const glowRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
