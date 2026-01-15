@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* ---------- THEME VARIABLES ---------- */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  --red: #b11212;
+  --red-dark: #6d0b0b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+/* ---------- TAILWIND INLINE THEME ---------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+/* ---------- BASE ---------- */
+html {
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  overflow-x: hidden;
+}
+
+/* ---------- TYPOGRAPHY HOOKS ---------- */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+p {
+  letter-spacing: 0.01em;
+}
+body {
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+.custom-cursor {
+  mix-blend-mode: difference;
+}
