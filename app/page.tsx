@@ -19,7 +19,7 @@ export default function HomePage() {
   /* ===== Audio ===== */
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataRef = useRef<Uint8Array | null>(null);
+  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const rafRef = useRef<number | null>(null);
 
   /* =============================
@@ -118,9 +118,10 @@ export default function HomePage() {
 
       audioCtxRef.current = ctx;
       analyserRef.current = analyser;
-      dataRef.current = new Uint8Array(
+      dataRef.current = new Uint8Array<ArrayBuffer>(
         new ArrayBuffer(analyser.frequencyBinCount)
       );
+
     }
 
     const tick = () => {
