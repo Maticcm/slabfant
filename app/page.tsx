@@ -12,40 +12,48 @@ export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const glowRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
+  const bgRef = useRef<HTMLDivElement | null>(null);
+  const playBtnRef = useRef<HTMLDivElement | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  /* ===== Audio ===== */
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const isMobile =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
+
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* =============================
-     PAGE + HERO SETUP
+     PAGE + HERO
   ============================== */
   useEffect(() => {
     window.scrollTo(0, 0);
 
-    const smoother = ScrollSmoother.create({
-      wrapper: "#smooth-wrapper",
-      content: "#smooth-content",
-      smooth: 1.4,
-      effects: true,
-    });
+    let smoother: ScrollSmoother | null = null;
+
+    if (!isMobile) {
+      smoother = ScrollSmoother.create({
+        wrapper: "#smooth-wrapper",
+        content: "#smooth-content",
+        smooth: 1.4,
+        effects: true,
+      });
+    }
 
     gsap.set(".hero-char", {
       x: 0,
       rotation: 0,
       opacity: 1,
-      filter: "blur(0px)",
+      filter: isMobile ? "none" : "blur(0px)",
     });
 
     ScrollTrigger.create({
       trigger: ".hero",
       start: "top top",
-      end: "+=110%",
+      end: isMobile ? "+=60%" : "+=110%",
       pin: true,
       pinSpacing: true,
     });
@@ -53,11 +61,11 @@ export default function HomePage() {
     gsap.to(".hero-char", {
       x: (i: number) => {
         const dir = i < 4 ? -1 : 1;
-        return dir * gsap.utils.random(120, 220);
+        return dir * (isMobile ? 60 : gsap.utils.random(120, 220));
       },
-      rotation: () => gsap.utils.random(-25, 25),
+      rotation: isMobile ? 0 : () => gsap.utils.random(-25, 25),
       opacity: 0.15,
-      filter: "blur(2px)",
+      filter: isMobile ? "none" : "blur(2px)",
       ease: "none",
       scrollTrigger: {
         trigger: ".hero",
@@ -67,92 +75,113 @@ export default function HomePage() {
       },
     });
 
-    gsap.set(".custom-cursor, .mouse-glow", {
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
+    if (!isMobile && !prefersReducedMotion) {
+      gsap.to(".hero-char", {
+        y: () => gsap.utils.random(-6, 6),
+        rotation: () => gsap.utils.random(-1.5, 1.5),
+        duration: () => gsap.utils.random(3, 6),
+        ease: "sine.inOut",
+        repeat: -1,
+        yoyo: true,
+        stagger: { each: 0.15, from: "random" },
+      });
+    }
 
-    const cursor = document.querySelector(".custom-cursor") as HTMLDivElement;
-    const glow = document.querySelector(".mouse-glow") as HTMLDivElement;
+    /* ===== Cursor tracking ===== */
+    if (!isMobile) {
+      const cursor = document.querySelector(".custom-cursor") as HTMLDivElement;
+      const glow = document.querySelector(".mouse-glow") as HTMLDivElement;
 
-    const moveCursor = (e: MouseEvent) => {
-      gsap.to(cursor, {
-        x: e.clientX,
-        y: e.clientY,
-        duration: 0.2,
-        ease: "power3.out",
+      gsap.set([cursor, glow], {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
       });
 
-      gsap.to(glow, {
-        x: e.clientX,
-        y: e.clientY,
-        duration: 0.8,
-        ease: "power3.out",
-      });
-    };
+      const moveCursor = (e: MouseEvent) => {
+        gsap.to(cursor, {
+          x: e.clientX,
+          y: e.clientY,
+          duration: 0.15,
+          ease: "power3.out",
+        });
 
-    window.addEventListener("mousemove", moveCursor);
-    ScrollTrigger.refresh();
+        gsap.to(glow, {
+          x: e.clientX,
+          y: e.clientY,
+          duration: 1.2,
+          ease: "expo.out",
+          overwrite: "auto",
+        });
+      };
+
+      window.addEventListener("mousemove", moveCursor);
+
+      return () => {
+        smoother?.kill();
+        window.removeEventListener("mousemove", moveCursor);
+        ScrollTrigger.getAll().forEach((t) => t.kill());
+      };
+    }
 
     return () => {
-      smoother.kill();
-      window.removeEventListener("mousemove", moveCursor);
+      smoother?.kill();
       ScrollTrigger.getAll().forEach((t) => t.kill());
     };
   }, []);
 
   /* =============================
-     AUDIO-REACTIVE GLOW
+     MAGNETIC CURSOR → PLAY BUTTON
   ============================== */
-  const startAudioAnalysis = () => {
-    if (!videoRef.current) return;
+  useEffect(() => {
+    if (isMobile || prefersReducedMotion) return;
 
-    if (!audioCtxRef.current) {
-      const ctx = new AudioContext();
-      const source = ctx.createMediaElementSource(videoRef.current);
-      const analyser = ctx.createAnalyser();
+    const cursor = document.querySelector(".custom-cursor") as HTMLDivElement;
+    const btn = playBtnRef.current;
+    if (!cursor || !btn) return;
 
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyser.connect(ctx.destination);
+    const radius = 120;
 
-      audioCtxRef.current = ctx;
-      analyserRef.current = analyser;
-      dataRef.current = new Uint8Array<ArrayBuffer>(
-        new ArrayBuffer(analyser.frequencyBinCount)
-      );
+    const onMove = (e: MouseEvent) => {
+      const rect = btn.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
 
-    }
+      const distance = Math.hypot(cx - e.clientX, cy - e.clientY);
 
-    const tick = () => {
-      if (!analyserRef.current || !dataRef.current || !glowRef.current) return;
+      if (distance < radius) {
+        gsap.to(cursor, {
+          x: cx,
+          y: cy,
+          duration: 0.25,
+          ease: "power3.out",
+        });
 
-      analyserRef.current.getByteFrequencyData(dataRef.current);
-      const avg =
-        dataRef.current.reduce((a, b) => a + b, 0) /
-        dataRef.current.length;
-
-      const intensity = gsap.utils.clamp(0.9, 1.4, avg / 70);
-
-      gsap.to(glowRef.current, {
-        scale: intensity,
-        opacity: gsap.utils.clamp(0.35, 0.65, avg / 120),
-        duration: 0.3,
-        ease: "power2.out",
-      });
-
-      rafRef.current = requestAnimationFrame(tick);
+        gsap.to(btn, {
+          scale: 1.08,
+          backgroundColor: "var(--red)",
+          color: "#ffffff",
+          borderColor: "var(--red)",
+          duration: 0.25,
+          ease: "power3.out",
+        });
+      } else {
+        gsap.to(btn, {
+          scale: 1,
+          backgroundColor: "transparent",
+          color: "var(--red)",
+          borderColor: "var(--red)",
+          duration: 0.35,
+          ease: "power3.out",
+        });
+      }
     };
 
-    tick();
-  };
-
-  const stopAudioAnalysis = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-  };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
 
   /* =============================
-     PLAY / PAUSE
+     VIDEO CONTROLS
   ============================== */
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -160,17 +189,12 @@ export default function HomePage() {
     if (videoRef.current.paused) {
       videoRef.current.play();
       setIsPlaying(true);
-      startAudioAnalysis();
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
-      stopAudioAnalysis();
     }
   };
 
-  /* =============================
-     PROGRESS BAR
-  ============================== */
   const onTimeUpdate = () => {
     if (!videoRef.current) return;
     setProgress(
@@ -178,89 +202,99 @@ export default function HomePage() {
     );
   };
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation(); // ✅ IMPORTANT FIX
-
+  const seek = (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
+  ) => {
+    e.stopPropagation();
     if (!videoRef.current || !progressRef.current) return;
 
     const rect = progressRef.current.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    videoRef.current.currentTime = percent * videoRef.current.duration;
+    const clientX =
+      "touches" in e ? e.touches[0].clientX : e.clientX;
+
+    const percent = (clientX - rect.left) / rect.width;
+    videoRef.current.currentTime =
+      Math.max(0, Math.min(1, percent)) *
+      videoRef.current.duration;
   };
 
   return (
     <div id="smooth-wrapper">
-      {/* FIXED UI */}
-      <div className="custom-cursor fixed top-0 left-0 z-50 w-3 h-3 rounded-full bg-white pointer-events-none -translate-x-1/2 -translate-y-1/2" />
-      <div
-        ref={glowRef}
-        className="mouse-glow fixed top-0 left-0 z-10 w-[420px] h-[420px] -translate-x-1/2 -translate-y-1/2 pointer-events-none rounded-full bg-[radial-gradient(circle,rgba(177,18,18,0.35),transparent_70%)] blur-3xl"
-      />
+      {!isMobile && (
+        <>
+          <div className="custom-cursor fixed top-0 left-0 z-50 w-3 h-3 rounded-full bg-white pointer-events-none -translate-x-1/2 -translate-y-1/2" />
+          <div
+            ref={glowRef}
+            className="mouse-glow fixed top-0 left-0 z-10 w-[420px] h-[420px] -translate-x-1/2 -translate-y-1/2 pointer-events-none rounded-full bg-[radial-gradient(circle,rgba(177,18,18,0.35),transparent_70%)] blur-3xl"
+          />
+        </>
+      )}
 
       <div id="smooth-content">
-        <main className="relative bg-black text-white overflow-x-hidden cursor-none">
-          <Background />
+        <main className="relative bg-black text-white overflow-x-hidden">
+          <div ref={bgRef}>
+            <Background />
+          </div>
 
           {/* HERO */}
           <section className="hero h-screen flex items-center justify-center">
-            <h1 className="flex gap-[3vw] text-[11vw] font-bold text-[var(--red)]">
-              <span>
-                {"SLAB".split("").map((c, i) => (
-                  <span key={i} className="hero-char inline-block">{c}</span>
-                ))}
-              </span>
-              <span>
-                {"FANT".split("").map((c, i) => (
-                  <span key={i} className="hero-char inline-block">{c}</span>
-                ))}
-              </span>
+            <h1 className="flex gap-[3vw] text-[18vw] sm:text-[14vw] md:text-[11vw] font-display tracking-[-0.04em] uppercase text-[var(--red)]">
+              {"SLAB FANT".split("").map((c, i) => (
+                <span key={i} className="hero-char inline-block">
+                  {c === " " ? "\u00A0" : c}
+                </span>
+              ))}
             </h1>
           </section>
 
-          {/* VIDEO PLAYER */}
-          <section className="min-h-[75vh] flex flex-col items-center justify-center gap-6 px-6">
+          {/* VIDEO */}
+          <section className="min-h-[75vh] flex flex-col items-center justify-center gap-8 px-6">
             <div
-              className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden border border-neutral-800 cursor-pointer"
+              className="video-wrap relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden border border-neutral-800"
               onClick={togglePlay}
             >
               <video
                 ref={videoRef}
-                src="/song-video.mp4"
+                src="https://cdn.jumpshare.com/preview/ymPfD-zpt--4jnCWYN6AlZS2HSDo1WsS0WaqXJcqAfFltiID5xOJjyPtZS5uB9tubL_Z2xZfeLtHxkCeAw2NJSjmULq-VNMDVs-yurPTD6otcWiJwhB4qYrtjxyhsFFJb9DIXdEYZ-3RDEgeZ66L7m6yjbN-I2pg_cnoHs_AmgI.mp4"
                 poster="/song-thumb.jpg"
                 playsInline
+                preload="metadata"
                 className="w-full h-full object-cover"
                 onTimeUpdate={onTimeUpdate}
               />
 
               {!isPlaying && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-20 h-20 rounded-full border border-[var(--red)] text-[var(--red)] text-3xl flex items-center justify-center hover:scale-110 transition">
+                  <div
+                    ref={playBtnRef}
+                    className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-[var(--red)] text-[var(--red)] text-2xl md:text-3xl flex items-center justify-center transition-colors"
+                  >
                     ▶
                   </div>
                 </div>
               )}
 
-              {/* TIME BAR */}
               <div
                 ref={progressRef}
                 onClick={seek}
-                className="absolute bottom-0 left-0 w-full h-2 bg-neutral-900 cursor-pointer"
+                onTouchStart={seek}
+                className="absolute bottom-0 left-0 w-full h-3 md:h-2 bg-neutral-900"
               >
                 <div
-                  className="h-full bg-[var(--red)] pointer-events-none"
+                  className="h-full bg-[var(--red)]"
                   style={{ width: `${progress}%` }}
                 />
               </div>
             </div>
 
-            {/* YOUTUBE BUTTON */}
+            {/* WATCH ON YOUTUBE */}
             <a
-              href="https://youtu.be/whCO5s2hzaE"
+              href="https://www.youtube.com/watch?v=whCO5s2hzaE"
               target="_blank"
               rel="noopener noreferrer"
-              className="yt-btn flex items-center gap-3 px-8 py-4 border border-[var(--red)] uppercase tracking-widest text-xs hover:bg-[var(--red)] hover:text-black transition"
+              className="px-8 py-4 border border-[var(--red)] text-[var(--red)] uppercase tracking-widest text-xs transition hover:bg-[var(--red)] hover:text-black"
             >
-              Watch on YouTube
+              Glej na YouTubu
             </a>
           </section>
 
